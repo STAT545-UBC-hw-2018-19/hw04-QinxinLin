@@ -1,0 +1,191 @@
+---
+title: "Homework 04 - Tidy data and joins"
+output: github_document
+---
+
+## Overview
+
+I will finish the following tasks in this assignment.
+
+* **Data Reshaping Prompts (and relationship to aggregation)**
+  * Make a tibble with one row per year and columns for life expectancy for two or more countries.
+  * Compute mean values of life expectancy for all possible combinations of continent and year. 
+  * Form a tibble: 2 per year, giving the country with both the lowest and highest life expectancy in all continents. Take that table and reshape it so you have one row per year * continent combination.
+  
+* **Join Prompts (join, merge, look up)**
+  * Create a second data frame, complementary to Gapminder. Join this with (part of) Gapminder using a dplyr join function and make some observations about the process and result. Explore the different types of joins.
+ 
+ 
+First we need to load `gapminder` dataset and `tidyverse` package and `knitr`package.
+
+```{r}
+library(gapminder)
+library(tidyverse)
+library(knitr)
+```
+
+## Data Reshaping Prompts (and relationship to aggregation)
+
+#### Make a tibble with one row per year and columns for life expectancy for two or more countries
+
+I want to compare life expectanct of China, Canada and Germany. 
+
+```{r}
+p1<-filter(gapminder, country %in% c('China','Germany','Canada'))%>%
+  select(year,country,lifeExp)
+kable(head(p1,10)) 
+```
+
+According to above table, we can see that it is not easy to compare life expectancy for multiple countries in the same year. so now I want to reshape this data into a new table using spread() function. 
+
+```{r}
+p2<-spread(p1,key = "country", value = "lifeExp") %>% 
+  rename(ChinaLifeExp = China,
+         GanadaLifeExp = Canada,
+         GermanyLifeExp = Germany
+         )
+kable(p2)
+```
+
+Now we can visiualize this data as a scatter plot. 
+
+```{r}
+ggplot(p1,aes(x=year,y=lifeExp))+
+  geom_point(aes(color=country),alpha=0.5)+
+  scale_x_continuous(limits=c(1952,2007),breaks=seq(1952,2007,5))+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size=14,hjust=0.5))+
+  labs(x="country",
+       y="life expectancy",
+       title="Life expectancy of China, Canada, Germany from 1952 to 2007")
+```
+
+We can see from the above graph, three countries had an increasing trend in life expectancies from 1952 until 2007. 
+
+#### Compute mean value of life expectancy for all possible combinations of continent and year. 
+
+I want to compute mean value of life expectancy for all combinations of continent and year.
+
+```{r}
+p3<-group_by(gapminder,continent,year)%>%
+  summarize(meanLifeExp = mean(lifeExp))
+p4<-spread(p3,key = "continent",value = "meanLifeExp")
+kable(p4)
+```
+
+We can reshape this data into another form. 
+
+```{r}
+spread(p3,key = "year", value = "meanLifeExp")%>%kable()
+```
+
+Now I will visiualize the data using line plot.
+
+```{r}
+ggplot(p4,aes(x=year))+
+  geom_line(aes(y=Asia),color = 'red', alpha = 0.5)+
+  geom_line(aes(y=Africa),color = 'blue', alpha = 0.5)+
+  geom_line(aes(y=Americas),color = 'black', alpha = 0.5)+
+  scale_x_continuous(limits=c(1952,2007),breaks=seq(1952,2007,5))+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size=14,hjust=0.5))+
+  labs(x="year",
+       y="mean life expectancy",
+       title="Mean Life expectancy of Asia, Americas and Europe from 1952 to 2007")
+```
+
+#### Form a tibble: 2 per year, giving the country with both the lowest and highest life expectancy in all continents. Take that table and reshape it so you have one row per year * continent combination.
+
+Firstly, we need to form this tibble.
+
+```{r}
+p5<-group_by(gapminder,year,continent)%>%
+  filter(min_rank(lifeExp)<2 | min_rank(desc(lifeExp))<2)%>%
+  select(year,continent,country,lifeExp)
+kable(head(p5,10))
+```
+
+Then we need to reshape above data into one row per year * continent combination. 
+
+```{r}
+p6<-group_by(p5,year,continent)%>%
+  arrange(lifeExp)%>%
+  mutate(min_lifeExp_Country = first(country), #first country has lowest life expectancy
+         min_lifeExp = min(lifeExp), 
+         max_lifeExp_Country = last(country), #last country has highest life expectancy
+         max_lifeExp = max(lifeExp))%>%
+  select(year, 
+         continent,
+         min_lifeExp_Country,
+         min_lifeExp,
+         max_lifeExp_Country,
+         max_lifeExp) %>%
+  unique()%>%
+  arrange(year)%>%
+  unite("year_continent",year,continent)
+kable(head(p6,20))
+```
+
+This table looks better. 
+
+## Join Prompts (join, merge, look up)
+
+#### Create a second data frame, complementary to Gapminder. Join this with (part of) Gapminder using a dplyr join function and make some observations about the process and result. Explore the different types of joins.
+
+I downloaded WHO dataset from [website](http://www.exploredata.net/Downloads/WHO-Data-Set). This dataset is too large so I decide to create a new data frame by just selecting three columns from WHO dataset : country, democracy_score and children_per_woman. 
+
+```{r}
+new_data<-read_csv("WHO.csv")%>%
+  select(country,democracy_score,children_per_woman) # selecting three columns from WHO data set to create a new data frame.
+kable(head(new_data,10)) #just show 10 lines 
+```
+
+Next, join this new data frame with gapminder using the various `join` functions.
+
+**left join**
+
+```{r}
+left_join(gapminder,new_data, by="country")
+```
+
+`left_join` adds the columns from the new_data dataset to the gapminder dataset based on country. This type of join preserves all data in the first data frame and adds new columns from the second data frame to matching rows.
+
+**right join**
+
+```{r}
+right_join(gapminder,new_data,by="country")
+```
+
+`right_join` adds the columns from gapminder dataset to the new_data dataset based on country. This type of join preserves all data in the second data frame and adds new columns from the first data frame to matching rows.
+
+**inner join**
+
+```{r}
+inner_join(gapminder,new_data,by="country")
+```
+
+`inner join` only retains observations that have a country in both gapminder and new_data.
+
+**full join**
+
+```{r}
+full_join(gapminder,new_data,by="country")
+```
+`full join` preserves all data from both data sets. It will create the largest data frame with lots of NULL data.
+
+**semi join**
+
+```{r}
+semi_join(gapminder,new_data)
+```
+
+`semi join` filters the gapminder dataset that includes countries that are in the new_data dataset. It does not actually join the two datasets together.
+
+**anti join**
+
+```{r}
+anti_join(gapminder,new_data)
+```
+
+`anti join` filters the gapminder dataset that includes countries that are not in the new_data dataset. It also does not join the two datasets together.
+
